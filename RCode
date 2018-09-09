@@ -1,0 +1,106 @@
+library(readxl)
+library("lubridate", lib.loc="~/R/win-library/3.5")
+library("ggplot2", lib.loc="~/R/win-library/3.5")
+shot_logs <- read_excel("C:/Users/iwa10783/Desktop/R/shot_logs.xlsx")
+summary(shot_logs)
+shot_logs = shot_logs[shot_logs$TOUCH_TIME >0,]
+shot_logs$player_name = as.factor(shot_logs$player_name)
+shot_logs$CLOSEST_DEFENDER = as.factor(shot_logs$CLOSEST_DEFENDER)
+head(shot_logs$GAME_CLOCK)
+
+
+shot_logs$GAME_CLOCK <- format(as.POSIXct(shot_logs$GAME_CLOCK) ,format = "%H:%M:%S") 
+shot_logs$GAME_CLOCK <- as.numeric(seconds(hms(shot_logs$GAME_CLOCK)))
+
+shot_logs$clutch_shot <- 'No'
+shot_logs$clutch_shot[shot_logs$GAME_CLOCK <= 240 & shot_logs$PERIOD >= 4 & abs(shot_logs$FINAL_MARGIN) <= 5] = "Yes"
+shot_logs$clutch_shot = factor(shot_logs$clutch_shot)
+
+
+
+shot_logs$SHOT_TYPE<-NA
+shot_logs$SHOT_TYPE[shot_logs$DRIBBLES <= 1 & shot_logs$SHOT_DIST  > 6] = 'Catch & Shoot'
+shot_logs$SHOT_TYPE[shot_logs$DRIBBLES <= 1 & shot_logs$SHOT_DIST <= 6] = 'Cut'
+shot_logs$SHOT_TYPE[shot_logs$DRIBBLES > 1 & shot_logs$SHOT_DIST  <= 6] = 'Lay Up/Dunk'
+shot_logs$SHOT_TYPE[shot_logs$DRIBBLES > 4] = 'ISO/Post up'
+shot_logs$SHOT_TYPE[shot_logs$DRIBBLES > 10] = 'Long ISO'
+shot_logs$SHOT_TYPE[shot_logs$DRIBBLES <=1 & shot_logs$PTS_TYPE == 3] = 'Spot Up 3'
+shot_logs$SHOT_TYPE = factor(shot_logs$SHOT_TYPE)
+
+summary(shot_logs$SHOT_TYPE)
+
+shot_logs$SHOT_CONTESTED <- NA
+shot_logs$SHOT_CONTESTED[shot_logs$CLOSE_DEF_DIST <= 2] = 'Tightly Contested'
+shot_logs$SHOT_CONTESTED[shot_logs$CLOSE_DEF_DIST <= 3.5 & shot_logs$CLOSE_DEF_DIST > 2] = 'Contested'
+shot_logs$SHOT_CONTESTED[shot_logs$CLOSE_DEF_DIST > 3.5 & shot_logs$CLOSE_DEF_DIST <= 5] = ' Lightly Contested'
+shot_logs$SHOT_CONTESTED[shot_logs$CLOSE_DEF_DIST > 5] = 'Wide Open'
+shot_logs$SHOT_CONTESTED = factor(shot_logs$SHOT_CONTESTED)
+summary(shot_logs$SHOT_CONTESTED)
+
+
+TCPPP= sum(shot_logs$PTS[shot_logs$SHOT_CONTESTED == 'Tightly Contested'])/nrow(shot_logs[shot_logs$SHOT_CONTESTED == 'Tightly Contested', ])
+CPPP= sum(shot_logs$PTS[shot_logs$SHOT_CONTESTED == 'Contested'])/nrow(shot_logs[shot_logs$SHOT_CONTESTED == 'Contested', ])
+LCPPP= sum(shot_logs$PTS[shot_logs$SHOT_CONTESTED == 'Lightly Contested'])/nrow(shot_logs[shot_logs$SHOT_CONTESTED == 'Lightly Contested', ])
+WOPPP = sum(shot_logs$PTS[shot_logs$SHOT_CONTESTED == 'Wide Open'])/nrow(shot_logs[shot_logs$SHOT_CONTESTED == 'Wide Open', ])
+TCPPP
+CPPP
+LCPPP
+WOPPP
+Defenderz = levels(as.factor(shot_logs$CLOSEST_DEFENDER))
+
+OppFG= rep(1, 473)
+OppPPP = rep(1, 473)
+OppDist = rep(1, 473)
+ShotsCont = rep(1, 473)
+RimDist = rep(1, 473)
+ShotsNear = rep(1, 473)
+
+for (i in 1:473) {
+  OppFG[i] = sum(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i]])/length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i]])
+  OppPPP[i] = sum(shot_logs$PTS[shot_logs$CLOSEST_DEFENDER == Defender[i]])/length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i]])
+  ShotsCont[i] = length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i] & shot_logs$CLOSE_DEF_DIST <= 3.5])
+  RimDist[i] = sum(shot_logs$SHOT_DIST[shot_logs$CLOSEST_DEFENDER == Defender[i]])/length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i]])
+  ShotsNear[i] = length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i]])
+}
+
+DefenderDF = data.frame(Defender,OppFG,OppPPP,ShotsCont,RimDist,ShotsNear)
+summary(DefenderDF)
+
+
+
+sp <- ggplot(data = DefenderDF[DefenderDF$ShotsCont >= 200 & DefenderDF$OppFG <= .7,],
+       aes(x = OppFG, y = OppPPP)) +
+  geom_point(colour = "blue", size = 2) +
+  geom_point(aes(colour = Defender)) +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_text(aes(label = Defender), size = 3, vjust = 0, check_overlap = TRUE) +
+  guides(colour = FALSE) +
+  labs(x = "Opponent FGP", y = "Opponent PPP")
+
+OppFGc= rep(1, 473)
+OppPPPc = rep(1, 473)
+OppDistc = rep(1, 473)
+ShotsContc = rep(1, 473)
+RimDistc = rep(1, 473)
+ShotsNearc = rep(1, 473)
+
+for (i in 1:473) {
+  OppFGc[i] = sum(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i] & shot_logs$clutch_shot == "Yes"])/length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i]& shot_logs$clutch_shot == "Yes"])
+  OppPPPc[i] = sum(shot_logs$PTS[shot_logs$CLOSEST_DEFENDER == Defender[i]& shot_logs$clutch_shot == "Yes"])/length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i] & shot_logs$clutch_shot == "Yes"])
+  ShotsContc[i] = length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i] & shot_logs$CLOSE_DEF_DIST <= 3.5 & shot_logs$clutch_shot == "Yes"])
+  RimDistc[i] = sum(shot_logs$SHOT_DIST[shot_logs$CLOSEST_DEFENDER == Defender[i] & shot_logs$clutch_shot == "Yes"])/length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i] & shot_logs$clutch_shot == "Yes"])
+  ShotsNearc[i] = length(shot_logs$FGM[shot_logs$CLOSEST_DEFENDER == Defender[i]& shot_logs$clutch_shot == "Yes"])
+}
+
+DefenderDFc = data.frame(Defender,OppFGc,OppPPPc,ShotsContc,RimDistc,ShotsNearc)
+summary(DefenderDFc)
+
+
+ggplot(data = DefenderDFc,
+             aes(x = OppFGc, y = OppPPPc)) +
+  geom_point(colour = "blue", size = 2) +
+  geom_point(aes(colour = Defender)) +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_text(aes(label = Defender), size = 3, vjust = 0, check_overlap = TRUE) +
+  guides(colour = FALSE) +
+  labs(x = "Opponent FGP", y = "Opponent PPP")
